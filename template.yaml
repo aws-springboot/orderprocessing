@@ -1,0 +1,191 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  orderprocessing
+
+  Sample SAM Template for orderprocessing
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 20
+    MemorySize: 512
+
+Resources:
+  # Step Function State Machine
+  OrderProcessingStateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties: 
+      DefinitionString:
+        Fn::Sub: |
+          {
+            "StartAt": "ValidateOrder",
+            "States": {
+              "ValidateOrder": {
+                "Type": "Task",
+                "Resource": "${ValidateOrderLambda.Arn}",
+                "Next": "ProcessPayment",
+                "Retry": [{"ErrorEquals": ["States.ALL"], "MaxAttempts": 3, "IntervalSeconds": 2}],
+                "Catch": [{"ErrorEquals": ["States.ALL"], "Next": "OrderFailed"}],
+                "TimeoutSeconds": 10
+              },
+              "ProcessPayment": {
+                "Type": "Task",
+                "Resource": "${ProcessPaymentLambda.Arn}",
+                "Next": "UpdateInventory",
+                "Retry": [{"ErrorEquals": ["States.ALL"], "MaxAttempts": 3, "IntervalSeconds": 2}],
+                "Catch": [{"ErrorEquals": ["States.ALL"], "Next": "OrderFailed"}],
+                "TimeoutSeconds": 10
+              },
+              "UpdateInventory": {
+                "Type": "Task",
+                "Resource": "${UpdateInventoryLambda.Arn}",
+                "Next": "NotifyCustomer",
+                "Retry": [{"ErrorEquals": ["States.ALL"], "MaxAttempts": 3, "IntervalSeconds": 2}],
+                "Catch": [{"ErrorEquals": ["States.ALL"], "Next": "OrderFailed"}],
+                "TimeoutSeconds": 10
+              },
+              "NotifyCustomer": {
+                "Type": "Task",
+                "Resource": "${NotifyCustomerLambda.Arn}",
+                "Next": "GenerateInvoice",
+                "Retry": [{"ErrorEquals": ["States.ALL"], "MaxAttempts": 3, "IntervalSeconds": 2}],
+                "Catch": [{"ErrorEquals": ["States.ALL"], "Next": "OrderFailed"}],
+                "TimeoutSeconds": 10
+              },
+              "GenerateInvoice": {
+                "Type": "Task",
+                "Resource": "${GenerateInvoiceLambda.Arn}",
+                "End": true,
+                "TimeoutSeconds": 10
+              },
+              "OrderFailed": {
+                "Type": "Fail",
+                "Error": "OrderProcessingFailed",
+                "Cause": "Workflow failed"
+              }
+
+            }
+          }
+      RoleArn: !GetAtt StepFunctionsExecutionRole.Arn
+
+   # IAM Role for Step Functions
+  StepFunctionsExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: states.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: StepFunctionsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "lambda:InvokeFunction"
+                Resource: "*"
+
+  ValidateOrderLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Timeout: 10
+      Code: orderprocessing
+      Handler: com.order.lambda.stepfunction.handler.ValidateOrderHandler::handleRequest
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Runtime: java17
+      Architectures:
+        - x86_64
+      MemorySize: 512
+      Environment: # More info about Env Vars: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#environment-object
+        Variables:
+          PARAM1: VALUE
+
+  ProcessPaymentLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Timeout: 10
+      Code: orderprocessing
+      Handler: com.order.lambda.stepfunction.handler.ProcessPaymentHandler::handleRequest
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Runtime: java17
+      Architectures:
+        - x86_64
+      MemorySize: 512
+
+  UpdateInventoryLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Timeout: 10
+      Code: orderprocessing
+      Handler: com.order.lambda.stepfunction.handler.UpdateInventoryHandler::handleRequest
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Runtime: java17
+      Architectures:
+        - x86_64
+      MemorySize: 512
+
+  NotifyCustomerLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Timeout: 10
+      Code: orderprocessing
+      Handler: com.order.lambda.stepfunction.handler.NotifyCustomerHandler::handleRequest
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Runtime: java17
+      Architectures:
+        - x86_64
+      MemorySize: 512
+
+  GenerateInvoiceLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Timeout: 10
+      Code: orderprocessing
+      Handler: com.order.lambda.stepfunction.handler.GenerateInvoiceHandler::handleRequest
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Runtime: java17
+      Architectures:
+        - x86_64
+      MemorySize: 512
+
+  # IAM Role for Lambda Functions
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: LambdaPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: "*"
+
+  # HelloWorldFunction:
+  #   Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+  #   Properties:
+  #     CodeUri: orderprocessing
+  #     Handler: com.order.lambda.stepfunction.handler.App::handleRequest
+  #     Runtime: java17
+  #     Architectures:
+  #       - x86_64
+  #     MemorySize: 512
+  #     Environment: # More info about Env Vars: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#environment-object
+  #       Variables:
+  #         PARAM1: VALUE
+     
