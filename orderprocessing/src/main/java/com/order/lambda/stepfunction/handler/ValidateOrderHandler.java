@@ -13,11 +13,11 @@ public class ValidateOrderHandler implements RequestHandler<Map<String, Object>,
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-        Map<String, Object> order = (Map<String, Object>) input.get("order");
-        int quantity = (int) order.get("product_quantity");
+        //Map<String, Object> order = (Map<String, Object>) input.get("order");
+        int quantity = (int) input.get("product_quantity");
         
         if (quantity <= 10) {  // Assume stock is available if quantity <= 10
-            return Map.of("status", "success", "order_id", order.get("order_id"));
+            return Map.of("status", "success", "order_id", input.get("order_id"));
         } else {
             return Map.of("status", "failed", "reason", "Insufficient stock");
         }

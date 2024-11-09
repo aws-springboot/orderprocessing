@@ -13,7 +13,7 @@ public class UpdateInventoryHandler implements RequestHandler<Map<String, Object
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-        Map<String, Object> order = (Map<String, Object>) input.get("order");
+        //Map<String, Object> order = (Map<String, Object>) input.get("order");
         String orderId = (String) input.get("order_id");
         // Simulate inventory update
         return Map.of("status", "success", "order_id", orderId);

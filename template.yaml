@@ -5,7 +5,6 @@ Description: >
 
   Sample SAM Template for orderprocessing
 
-# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
 Globals:
   Function:
     Timeout: 20
@@ -89,6 +88,26 @@ Resources:
                 Action:
                   - "lambda:InvokeFunction"
                 Resource: "*"
+
+   # Lambda Function for Step Function Integration (Start Step Function Execution)
+  StartStepFunctionLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Timeout: 30
+      Code: orderprocessing  # The directory or S3 location where your Lambda code is stored
+      Handler: com.order.lambda.stepfunction.handler.StartStepFunctionHandler::handleRequest
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Runtime: java17
+      Architectures:
+        - x86_64
+      MemorySize: 512
+
+  StartStepFunctionLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref StartStepFunctionLambda
+      Principal: apigateway.amazonaws.com
 
   ValidateOrderLambda:
     Type: AWS::Lambda::Function
@@ -175,6 +194,62 @@ Resources:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource: "*"
+              - Effect: Allow
+                Action:
+                 - states:StartExecution  # This grants permission to start Step Functions
+                Resource: arn:aws:states:ap-south-1:588738584877:stateMachine:OrderProcessingStateMachine-b8JufPg1iiaE
+
+  # API Gateway to trigger Lambda
+  OrderProcessingApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: "OrderProcessingApi"
+      Description: "API Gateway for triggering Order Processing Step Function"
+      
+  OrderProcessingApiResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref OrderProcessingApi
+      ParentId: !GetAtt OrderProcessingApi.RootResourceId
+      PathPart: "process-order"
+
+  OrderProcessingApiMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: POST
+      ResourceId: !Ref OrderProcessingApiResource
+      RestApiId: !Ref OrderProcessingApi
+      Integration:
+        IntegrationHttpMethod: POST
+        Type: AWS_PROXY
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${StartStepFunctionLambda.Arn}/invocations"
+        PassthroughBehavior: WHEN_NO_MATCH
+
+  OrderProcessingApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    Properties:
+      RestApiId: !Ref OrderProcessingApi
+      StageName: prod
+    DependsOn: 
+      - StartStepFunctionLambda  # Ensure your method or integration resource is included here
+
+  ApiGatewayInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref StartStepFunctionLambda
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${OrderProcessingApi}/*/POST/process-order
+
+Outputs:
+  StepFunctionArn:
+    Description: "ARN of the OrderProcessing State Machine"
+    Value: !Ref OrderProcessingStateMachine
+
+  ApiUrl:
+    Description: "URL of the OrderProcessing API Gateway"
+    Value: !Sub "https://${OrderProcessingApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/process-order"
 
   # HelloWorldFunction:
   #   Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
